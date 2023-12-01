@@ -11,6 +11,8 @@ from llama_index import (
     SimpleDirectoryReader,
     LLMPredictor,
     ServiceContext,
+    GPTTreeIndex,
+    KnowledgeGraphIndex,
 )
 
 from llama_index.vector_stores import PineconeVectorStore
@@ -18,6 +20,8 @@ from llama_index.llms import OpenAI
 from llama_index.storage.storage_context import StorageContext
 from llama_index.indices.composability.graph import ComposableGraph
 from llama_index.query_engine import CitationQueryEngine
+from llama_index.graph_stores import SimpleGraphStore
+from pyvis.network import Network
 
 
 os.environ["OPENAI_API_KEY"] = ""
@@ -140,4 +144,37 @@ response = query_engine.query("Does Seattle or Houston have a bigger airport?")
 print(response)
 for source in response.source_nodes:
     print(source.node.get_text())
+
+
+tree_index = GPTTreeIndex.from_documents(documents)
+
+# if you want to have more content from the answer,
+# you can add the parameters child_branch_factor
+# let's try using branching factor 2
+query_engine = tree_index.as_query_engine(
+    child_branch_factor=2
+)
+tree_response = query_engine.query("Does Seattle or Houston have a bigger airport?")
+
+graph_store = SimpleGraphStore()
+storage_context = StorageContext.from_defaults(graph_store=graph_store)
+
+knowledge_graph_index = KnowledgeGraphIndex.from_documents(
+    documents,
+    max_triplets_per_chunk=2,
+    storage_context=storage_context,
+    service_context=service_context,
+)
+
+query_engine = knowledge_graph_index.as_query_engine(
+    include_text=False, response_mode="tree_summarize"
+)
+knowledge_graph_response = query_engine.query("Does Seattle or Houston have a bigger airport?")
+
+
+# create graph
+g = knowledge_graph_index.get_networkx_graph()
+net = Network(notebook=True, cdn_resources="in_line", directed=True)
+net.from_nx(g)
+net.show("example.html")
 
